@@ -1,7 +1,7 @@
 // Product data access. Import from Server Components only (it talks to Postgres).
 // Reads are cached and tagged "products"; call updateTag("products") after any
 // product/stock write so pages pick up the change.
-import { asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { cacheLife, cacheTag } from "next/cache";
 import { db } from "@/db";
 import { categories, collectionProducts, collections, products, stock } from "@/db/schema";
@@ -76,6 +76,9 @@ function toProduct(r: Row): Product {
   };
 }
 
+/** Archived products are hidden everywhere on the storefront. */
+const live = isNull(products.archivedAt);
+
 function baseQuery() {
   return db
     .select(productColumns)
@@ -90,7 +93,7 @@ export async function getFeaturedProducts(): Promise<Product[]> {
   cacheTag("products");
 
   const rows = await baseQuery()
-    .where(eq(products.isFeatured, true))
+    .where(and(live, eq(products.isFeatured, true)))
     .orderBy(asc(products.id));
   return rows.map(toProduct);
 }
@@ -102,6 +105,7 @@ export async function getLatestProducts(limit = 24): Promise<Product[]> {
   cacheTag("products");
 
   const rows = await baseQuery()
+    .where(live)
     .orderBy(desc(products.createdAt), desc(products.id))
     .limit(limit);
   return rows.map(toProduct);
@@ -112,7 +116,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   cacheLife("minutes");
   cacheTag("products");
 
-  const [row] = await baseQuery().where(eq(products.slug, slug)).limit(1);
+  const [row] = await baseQuery().where(and(live, eq(products.slug, slug))).limit(1);
   return row ? toProduct(row) : null;
 }
 
@@ -129,7 +133,7 @@ export async function getRelatedProducts(slug: string, limit = 4): Promise<Produ
     .limit(1);
 
   const rows = await baseQuery()
-    .where(ne(products.slug, slug))
+    .where(and(live, ne(products.slug, slug)))
     .orderBy(
       desc(sql`(${products.categoryId} = ${current?.categoryId ?? -1})`),
       asc(products.id),
@@ -146,6 +150,7 @@ export async function getAllProductSlugs(): Promise<string[]> {
   const rows = await db
     .select({ slug: products.slug })
     .from(products)
+    .where(live)
     .orderBy(asc(products.id));
   return rows.map((r) => r.slug);
 }
@@ -212,7 +217,7 @@ export async function getCollectionPage(slug: string): Promise<CollectionPage | 
   if (collection) {
     const rows = await baseQuery()
       .innerJoin(collectionProducts, eq(collectionProducts.productId, products.id))
-      .where(eq(collectionProducts.collectionId, collection.id))
+      .where(and(live, eq(collectionProducts.collectionId, collection.id)))
       .orderBy(asc(collectionProducts.position));
     return {
       kind: "collection",
@@ -231,7 +236,40 @@ export async function getCollectionPage(slug: string): Promise<CollectionPage | 
   if (!category) return null;
 
   const rows = await baseQuery()
-    .where(eq(categories.slug, slug))
+    .where(and(live, eq(categories.slug, slug)))
     .orderBy(desc(products.createdAt), desc(products.id));
   return { kind: "category", slug: category.slug, name: category.name, blurb: null, products: rows.map(toProduct) };
+}
+
+/**
+ * Storefront search. Every word in the query must match the start of a word in a product's name,
+ * category, description or collection name (case-insensitive). Name matches rank first.
+ * Deliberately NOT cached: the query text is unbounded user input, and results should
+ * reflect current stock. Request-time only (call it after awaiting searchParams).
+ */
+export async function searchProducts(query: string, limit = 48): Promise<Product[]> {
+  const terms = [...new Set(query.toLowerCase().split(/\s+/).map((t) => t.slice(0, 40)).filter(Boolean))].slice(0, 5);
+  if (terms.length === 0) return [];
+
+  const like = (t: string) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  // Match at the START of a word ("men" finds Men but not Women; "jack" finds Jacket).
+  // \m is Postgres' word-start anchor; the term is regex-escaped so input like "(" is harmless.
+  const wordStart = (t: string) => `\\m${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`;
+  const matchesTerm = (t: string) =>
+    or(
+      sql`${products.name} ~* ${wordStart(t)}`,
+      sql`${categories.name} ~* ${wordStart(t)}`,
+      sql`${products.description} ~* ${wordStart(t)}`,
+      sql`exists (select 1 from collection_products cp join collections col on col.id = cp.collection_id where cp.product_id = "products"."id" and col.name ~* ${wordStart(t)})`,
+    );
+
+  const rows = await baseQuery()
+    .where(and(live, ...terms.map(matchesTerm)))
+    .orderBy(
+      sql`case when ${products.name} ilike ${like(terms.join(" "))} then 0 when ${categories.name} ilike ${like(terms[0])} then 1 else 2 end`,
+      desc(products.createdAt),
+      desc(products.id),
+    )
+    .limit(limit);
+  return rows.map(toProduct);
 }

@@ -438,3 +438,72 @@ body {
     outline-offset: 0;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * 9. Status badges and data tables (used by the admin area)
+ * ------------------------------------------------------------------------- */
+@layer components {
+  /* Square outlined status pill. Colour comes from a text-* utility. */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border: 1px solid currentColor;
+    font-family: var(--font-sans);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* Hairline data table. Wrap in `.box-hairline.overflow-x-auto` so it scrolls on phones. */
+  .admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .admin-table th {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--color-line-strong);
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-ink-muted);
+    white-space: nowrap;
+  }
+
+  .admin-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--color-line);
+    vertical-align: middle;
+  }
+
+  .admin-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .admin-table tbody tr:hover {
+    background: var(--color-surface);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * 10. Search fields
+ *     The header search bar is an underline-style field: the underline on its form
+ *     (which thickens on focus) is the focus indicator, so the default outline is off.
+ *     Browsers add a blue "clear" cross to type=search; hide it to keep the palette.
+ * ------------------------------------------------------------------------- */
+.search-input:focus-visible {
+  outline: none;
+}
+
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}

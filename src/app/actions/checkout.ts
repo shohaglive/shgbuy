@@ -6,7 +6,7 @@ import type { BatchItem } from "drizzle-orm/batch";
 import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { cartItems, orderItems, orders, stock } from "@/db/schema";
+import { cartItems, orderEvents, orderItems, orders, stock, stockMovements } from "@/db/schema";
 import { getCart, getSessionUser } from "@/lib/cart";
 import { COUNTRIES } from "@/lib/countries";
 
@@ -108,6 +108,17 @@ export async function placeOrder(_prev: CheckoutState, formData: FormData): Prom
         .update(stock)
         .set({ quantity: sql`${stock.quantity} - ${w.quantity}`, updatedAt: new Date() })
         .where(eq(stock.productId, productId)),
+    ),
+    // Audit trail, written in the same atomic batch.
+    db.insert(orderEvents).values({ orderId, fromStatus: null, toStatus: "confirmed", actorId: user?.id ?? null }),
+    db.insert(stockMovements).values(
+      [...wanted.entries()].map(([productId, w]) => ({
+        productId,
+        delta: -w.quantity,
+        reason: "sale" as const,
+        orderId,
+        note: orderNumber,
+      })),
     ),
     db.delete(cartItems).where(eq(cartItems.cartId, cart.id)),
   ];

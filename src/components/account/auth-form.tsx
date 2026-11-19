@@ -54,7 +54,14 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         <input id="email" name="email" type="email" required autoComplete="email" className="field" />
       </div>
       <div>
-        <label htmlFor="password" className="label mb-2 block">Password</label>
+        <div className="mb-2 flex items-baseline justify-between gap-4">
+          <label htmlFor="password" className="label">Password</label>
+          {!isRegister && (
+            <Link href="/account/forgot-password" className="link text-sm text-ink-muted hover:text-ink">
+              Forgot password?
+            </Link>
+          )}
+        </div>
         <input
           id="password"
           name="password"

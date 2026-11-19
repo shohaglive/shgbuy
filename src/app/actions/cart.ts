@@ -27,7 +27,7 @@ async function loadProduct(productId: number) {
     .select({
       id: products.id,
       sizes: products.sizes,
-      stock: sql<number>`coalesce(${stock.quantity}, 0)`.mapWith(Number),
+      stock: sql<number>`case when ${products.archivedAt} is not null then 0 else coalesce(${stock.quantity}, 0) end`.mapWith(Number),
     })
     .from(products)
     .leftJoin(stock, eq(stock.productId, products.id))

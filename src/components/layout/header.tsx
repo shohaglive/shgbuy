@@ -1,13 +1,42 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
-import { mainNav } from "@/lib/catalog";
-import { CloseIcon, MenuIcon, SearchIcon, UserIcon } from "@/components/ui/icons";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { mainNav, popularSearches } from "@/lib/catalog";
+import { CloseIcon, MenuIcon, SearchIcon } from "@/components/ui/icons";
 
-/** `bag` is a server-rendered slot so the live cart count can stream in. */
-export function Header({ bag }: { bag: ReactNode }) {
+/** `bag`, `account` and `accountLabel` are server-rendered slots so session-dependent bits can stream in. */
+export function Header({
+  bag,
+  account,
+  accountLabel,
+}: {
+  bag: ReactNode;
+  account: ReactNode;
+  accountLabel: ReactNode;
+}) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInput = useRef<HTMLInputElement>(null);
+
+  // Focus the search field when the bar opens; Escape closes it.
+  useEffect(() => {
+    if (!searchOpen) return;
+    searchInput.current?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setSearchOpen(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [searchOpen]);
+
+  function onSearch(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const term = String(new FormData(e.currentTarget).get("q") ?? "").trim();
+    if (!term) return;
+    setSearchOpen(false);
+    router.push(`/search?q=${encodeURIComponent(term)}`);
+  }
 
   // Lock page scroll and close on Escape while the mobile menu is open.
   useEffect(() => {
@@ -30,7 +59,13 @@ export function Header({ bag }: { bag: ReactNode }) {
         </p>
       </div>
 
-      <header className="sticky top-0 z-40 border-b border-line bg-canvas">
+      {/* Any link clicked inside the header (nav, suggestions) also closes the search bar. */}
+      <header
+        className="sticky top-0 z-40 border-b border-line bg-canvas"
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("a")) setSearchOpen(false);
+        }}
+      >
         <div className="container-page grid h-16 grid-cols-[1fr_auto_1fr] items-center lg:h-20">
           {/* Left: menu button (mobile) / primary nav (desktop) */}
           <div className="flex items-center">
@@ -64,15 +99,61 @@ export function Header({ bag }: { bag: ReactNode }) {
 
           {/* Right: utilities */}
           <div className="flex items-center justify-end gap-1 sm:gap-4">
-            <Link href="/search" className="nav-link flex items-center gap-2 p-2 lg:p-0" aria-label="Search">
-              <SearchIcon />
-              <span className="hidden lg:inline">Search</span>
-            </Link>
-            <Link href="/account" className="nav-link hidden items-center gap-2 sm:flex" aria-label="Account">
-              <UserIcon />
-              <span className="hidden lg:inline">Account</span>
-            </Link>
+            <button
+              type="button"
+              className="nav-link flex items-center gap-2 p-2 lg:p-0"
+              aria-label={searchOpen ? "Close search" : "Search"}
+              aria-expanded={searchOpen}
+              aria-controls="site-search"
+              onClick={() => setSearchOpen((o) => !o)}
+            >
+              {searchOpen ? <CloseIcon /> : <SearchIcon />}
+              <span className="hidden lg:inline">{searchOpen ? "Close" : "Search"}</span>
+            </button>
+            {account}
             {bag}
+          </div>
+        </div>
+
+        {/* Search bar: grows open beneath the header row. `inert` keeps it out of the tab order while closed. */}
+        <div
+          id="site-search"
+          role="search"
+          inert={!searchOpen}
+          aria-hidden={!searchOpen}
+          className={`grid transition-[grid-template-rows,opacity] duration-300 ease-ui ${
+            searchOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+          }`}
+        >
+          <div className="overflow-hidden">
+            <div className="container-page border-t border-line py-6 lg:py-8">
+              <form
+                action="/search"
+                method="get"
+                onSubmit={onSearch}
+                className="flex items-center gap-4 border-b border-line-strong pb-3 focus-within:border-b-2"
+              >
+                <SearchIcon className="shrink-0" />
+                <input
+                  ref={searchInput}
+                  name="q"
+                  type="search"
+                  autoComplete="off"
+                  aria-label="Search products"
+                  placeholder="Search products"
+                  className="search-input min-w-0 flex-1 bg-transparent font-display text-2xl placeholder:text-ink-subtle lg:text-4xl"
+                />
+                <button type="submit" className="label shrink-0 py-2">Search</button>
+              </form>
+              <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2">
+                <span className="eyebrow">Popular</span>
+                {popularSearches.map((term) => (
+                  <Link key={term} href={`/search?q=${encodeURIComponent(term)}`} className="link text-sm">
+                    {term}
+                  </Link>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -104,7 +185,7 @@ export function Header({ bag }: { bag: ReactNode }) {
             </Link>
           ))}
           <Link href="/account" onClick={() => setOpen(false)} className="label mt-8 py-2">
-            Account
+            {accountLabel}
           </Link>
           <Link href="/help/contact" onClick={() => setOpen(false)} className="label py-2">
             Client Care

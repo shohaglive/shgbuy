@@ -50,6 +50,8 @@ export const products = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    /** Set when a product is taken off sale. Archived products are hidden from the storefront. */
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
   },
   (t) => [
     index("products_category_id_idx").on(t.categoryId),
@@ -82,6 +84,8 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  /** "user" or "admin". Never settable from the web: see src/db/make-admin.ts. */
+  role: text("role").notNull().default("user"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -231,7 +235,7 @@ export const orders = pgTable(
     orderNumber: text("order_number").notNull().unique(),
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     email: text("email").notNull(),
-    status: text("status", { enum: ["confirmed", "cancelled"] })
+    status: text("status", { enum: ["confirmed", "shipped", "delivered", "cancelled"] })
       .notNull()
       .default("confirmed"),
     subtotalCents: integer("subtotal_cents").notNull(),
@@ -246,9 +250,19 @@ export const orders = pgTable(
     shipCountry: text("ship_country").notNull(),
     shipPhone: text("ship_phone"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    shippedAt: timestamp("shipped_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   },
   (t) => [
     index("orders_user_id_idx").on(t.userId),
+    index("orders_created_at_idx").on(t.createdAt.desc(), t.id.desc()),
+    index("orders_status_created_at_idx").on(t.status, t.createdAt.desc()),
+    check(
+      "orders_status_valid",
+      sql`${t.status} in ('confirmed', 'shipped', 'delivered', 'cancelled')`,
+    ),
     check(
       "orders_amounts_nonnegative",
       sql`${t.subtotalCents} >= 0 AND ${t.shippingCents} >= 0 AND ${t.totalCents} >= 0`,
@@ -274,6 +288,52 @@ export const orderItems = pgTable(
     index("order_items_order_id_idx").on(t.orderId),
     check("order_items_quantity_positive", sql`${t.quantity} >= 1`),
   ],
+);
+
+/* -------------------------------------------------------------------------
+ * Audit trail. Every stock change and order status change leaves a row.
+ * Actor and product/order links become null if the row they point to is deleted,
+ * so history survives.
+ * ----------------------------------------------------------------------- */
+export const stockMovements = pgTable(
+  "stock_movements",
+  {
+    id: serial("id").primaryKey(),
+    productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
+    /** Signed change in units (negative for sales). */
+    delta: integer("delta").notNull(),
+    reason: text("reason", {
+      enum: ["initial", "restock", "correction", "sale", "cancel"],
+    }).notNull(),
+    note: text("note"),
+    actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
+    orderId: uuid("order_id").references(() => orders.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("stock_movements_product_created_idx").on(t.productId, t.createdAt.desc()),
+    index("stock_movements_created_at_idx").on(t.createdAt.desc()),
+    check(
+      "stock_movements_reason_valid",
+      sql`${t.reason} in ('initial', 'restock', 'correction', 'sale', 'cancel')`,
+    ),
+  ],
+);
+
+export const orderEvents = pgTable(
+  "order_events",
+  {
+    id: serial("id").primaryKey(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    /** Null for the initial placement event. */
+    fromStatus: text("from_status"),
+    toStatus: text("to_status").notNull(),
+    actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("order_events_order_id_idx").on(t.orderId, t.createdAt)],
 );
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
@@ -335,5 +395,8 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
 }));
 
 export type JournalPost = typeof journalPosts.$inferSelect;
+export type StockMovement = typeof stockMovements.$inferSelect;
+export type OrderEvent = typeof orderEvents.$inferSelect;
+export type OrderStatus = Order["status"];
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;

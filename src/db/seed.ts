@@ -1,4 +1,4 @@
-// Idempotent seed: `npm run db:seed`. Upserts by slug / product id, so re-running is safe.
+// Idempotent seed: `npm run db:seed`. Inserts missing rows only; never overwrites existing data.
 import { neon } from "@neondatabase/serverless";
 import { config } from "dotenv";
 import { sql } from "drizzle-orm";
@@ -13,19 +13,18 @@ async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set (.env.local).");
   const db = drizzle({ client: neon(url), schema });
-  const { categories, collectionProducts, collections, journalPosts, products, stock } = schema;
+  const { categories, collectionProducts, collections, journalPosts, products, stock, stockMovements } = schema;
 
-  const categoryRows = await db
+  // Seeding only INSERTS missing rows (by slug / id). It never overwrites rows that
+  // already exist, so edits made in the admin area survive a re-run.
+  await db
     .insert(categories)
     .values([...seedCategories])
-    .onConflictDoUpdate({
-      target: categories.slug,
-      set: { name: sql`excluded.name` },
-    })
-    .returning({ id: categories.id, slug: categories.slug });
+    .onConflictDoNothing({ target: categories.slug });
+  const categoryRows = await db.select({ id: categories.id, slug: categories.slug }).from(categories);
   const categoryId = new Map(categoryRows.map((c) => [c.slug, c.id]));
 
-  const productRows = await db
+  const insertedProducts = await db
     .insert(products)
     .values(
       seedProducts.map((p) => ({
@@ -41,39 +40,33 @@ async function main() {
         isFeatured: p.isFeatured ?? false,
       })),
     )
-    .onConflictDoUpdate({
-      target: products.slug,
-      set: {
-        name: sql`excluded.name`,
-        categoryId: sql`excluded.category_id`,
-        priceCents: sql`excluded.price_cents`,
-        description: sql`excluded.description`,
-        details: sql`excluded.details`,
-        sizes: sql`excluded.sizes`,
-        images: sql`excluded.images`,
-        isNew: sql`excluded.is_new`,
-        isFeatured: sql`excluded.is_featured`,
-        updatedAt: sql`now()`,
-      },
-    })
+    .onConflictDoNothing({ target: products.slug })
     .returning({ id: products.id, slug: products.slug });
+  const productRows = await db.select({ id: products.id, slug: products.slug }).from(products);
   const productId = new Map(productRows.map((p) => [p.slug, p.id]));
+  const newlyInserted = new Set(insertedProducts.map((p) => p.slug));
 
-  await db
-    .insert(stock)
-    .values(
-      seedProducts.map((p) => ({
-        productId: productId.get(p.slug)!,
-        quantity: p.stock,
-      })),
-    )
-    .onConflictDoUpdate({
-      target: stock.productId,
-      set: { quantity: sql`excluded.quantity`, updatedAt: sql`now()` },
-    });
+  // Stock (and its "initial" movement) only for products created by this run.
+  const newStock = seedProducts.filter((p) => newlyInserted.has(p.slug));
+  if (newStock.length > 0) {
+    await db.batch([
+      db
+        .insert(stock)
+        .values(newStock.map((p) => ({ productId: productId.get(p.slug)!, quantity: p.stock })))
+        .onConflictDoNothing({ target: stock.productId }),
+      db.insert(stockMovements).values(
+        newStock.map((p) => ({
+          productId: productId.get(p.slug)!,
+          delta: p.stock,
+          reason: "initial" as const,
+          note: "Seed data",
+        })),
+      ),
+    ]);
+  }
 
   // Collections and their product links (links are replaced atomically per run).
-  const collectionRows = await db
+  await db
     .insert(collections)
     .values(
       seedCollections.map((c) => ({
@@ -85,17 +78,8 @@ async function main() {
         sortOrder: c.sortOrder,
       })),
     )
-    .onConflictDoUpdate({
-      target: collections.slug,
-      set: {
-        name: sql`excluded.name`,
-        blurb: sql`excluded.blurb`,
-        imageSrc: sql`excluded.image_src`,
-        imageAlt: sql`excluded.image_alt`,
-        sortOrder: sql`excluded.sort_order`,
-      },
-    })
-    .returning({ id: collections.id, slug: collections.slug });
+    .onConflictDoNothing({ target: collections.slug });
+  const collectionRows = await db.select({ id: collections.id, slug: collections.slug }).from(collections);
   const collectionId = new Map(collectionRows.map((c) => [c.slug, c.id]));
 
   const links = seedCollections.flatMap((c) =>
@@ -105,10 +89,7 @@ async function main() {
       position,
     })),
   );
-  await db.batch([
-    db.delete(collectionProducts),
-    db.insert(collectionProducts).values(links),
-  ]);
+  await db.insert(collectionProducts).values(links).onConflictDoNothing();
 
   await db
     .insert(journalPosts)
@@ -129,7 +110,7 @@ async function main() {
     `Seeded ${collectionRows.length} collections, ${links.length} collection links, ${seedJournal.length} journal posts.`,
   );
   console.log(
-    `Seeded ${categoryRows.length} categories, ${productRows.length} products, ${productRows.length} stock rows.`,
+    `Seed complete: ${insertedProducts.length} new products (of ${productRows.length}); existing rows untouched.`,
   );
 }
 

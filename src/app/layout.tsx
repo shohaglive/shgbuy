@@ -1,9 +1,5 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Inter } from "next/font/google";
-import { Suspense } from "react";
-import { BagLink, BagLinkView } from "@/components/cart/bag-link";
-import { Footer } from "@/components/layout/footer";
-import { Header } from "@/components/layout/header";
 import "./globals.css";
 
 // Serif display face for headings (see --font-display in globals.css).
@@ -35,20 +31,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${displayFont.variable} ${bodyFont.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-canvas text-ink">
-        <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-canvas focus:p-3">
-          Skip to content
-        </a>
-        <Header
-          bag={
-            <Suspense fallback={<BagLinkView />}>
-              <BagLink />
-            </Suspense>
-          }
-        />
-        <div className="flex-1">{children}</div>
-        <Footer />
-      </body>
+      <body className="min-h-full flex flex-col bg-canvas text-ink">{children}</body>
     </html>
   );
 }

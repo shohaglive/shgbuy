@@ -50,3 +50,35 @@ export const ArrowIcon = (p: SVGProps<SVGSVGElement>) => (
     <path d="M4 12h16m-5-5 5 5-5 5" />
   </svg>
 );
+
+export const PlusIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} width={16} height={16} {...p}>
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+
+export const CheckIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} width={16} height={16} {...p}>
+    <path d="m5 12.5 4.5 4.5L19 7.5" />
+  </svg>
+);
+
+export const ChevronLeftIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} width={16} height={16} {...p}>
+    <path d="m15 5-7 7 7 7" />
+  </svg>
+);
+
+export const ChevronRightIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} width={16} height={16} {...p}>
+    <path d="m9 5 7 7-7 7" />
+  </svg>
+);
+
+/** Solid version of UserIcon, shown for signed-in customers. */
+export const UserFilledIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} fill="currentColor" {...p}>
+    <circle cx="12" cy="8.5" r="3.5" />
+    <path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5Z" />
+  </svg>
+);

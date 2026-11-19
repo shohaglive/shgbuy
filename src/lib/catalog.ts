@@ -60,6 +60,9 @@ export const services = [
   { title: "Client Care", body: "Styling advice, seven days a week." },
 ];
 
+/** Suggested searches shown in the header search bar and on the search page. */
+export const popularSearches = ["Jacket", "Dress", "Bag", "Coat", "Sunglasses"];
+
 export const mainNav = [
   { label: "New Arrivals", href: "/collections/new-arrivals" },
   { label: "Women", href: "/collections/women" },
@@ -102,5 +105,7 @@ export const formatPrice = (cents: number) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    // Whole-dollar prices stay clean ($1,450); anything with cents shows them ($199.50).
+    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
   }).format(cents / 100);

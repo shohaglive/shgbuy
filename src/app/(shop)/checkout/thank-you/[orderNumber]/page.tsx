@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { OrderTotals } from "@/components/cart/order-summary";
 import { formatPrice } from "@/lib/catalog";
+import { ORDER_STATUS_LABEL } from "@/lib/order-status";
 import { getOrderByNumber } from "@/lib/orders";
 
 export const metadata: Metadata = {
@@ -34,11 +35,14 @@ async function Confirmation({ params }: Pick<PageProps<"/checkout/thank-you/[ord
   return (
     <>
       <header className="mb-12 max-w-2xl lg:mb-16">
-        <p className="eyebrow mb-3">Order confirmed</p>
-        <h1 id="thanks-title">Thank you for your order</h1>
+        <p className="eyebrow mb-3">{ORDER_STATUS_LABEL[order.status] === "Confirmed" ? "Order confirmed" : `Order ${ORDER_STATUS_LABEL[order.status].toLowerCase()}`}</p>
+        <h1 id="thanks-title">{order.status === "cancelled" ? "This order was cancelled" : "Thank you for your order"}</h1>
         <p className="mt-4 text-ink-muted">
-          Your order <span className="font-medium text-ink">{order.orderNumber}</span> has been placed. This is a demo
-          store, so no confirmation email is sent and nothing will ship.
+          Your order <span className="font-medium text-ink">{order.orderNumber}</span>{" "}
+          {order.status === "confirmed" && "has been placed. This is a demo store, so no confirmation email is sent and nothing will ship."}
+          {order.status === "shipped" && "has been marked as shipped. This is a demo store, so nothing is actually in transit."}
+          {order.status === "delivered" && "has been marked as delivered."}
+          {order.status === "cancelled" && "was cancelled and the items were returned to stock."}
         </p>
       </header>
 

@@ -2,53 +2,28 @@
 
 import { useActionState } from "react";
 import { placeOrder, type CheckoutState } from "@/app/actions/checkout";
+import { Field as SharedField } from "@/components/ui/field";
 import { COUNTRIES } from "@/lib/countries";
 
 type Defaults = { email: string; name: string };
 
+/** Adapter: pulls this form's error and echoed value out of the action state. */
 function Field({
-  label,
-  name,
   state,
+  name,
   defaultValue,
-  required = true,
-  type = "text",
-  autoComplete,
-  className,
-}: {
-  label: string;
-  name: string;
-  state: CheckoutState;
-  defaultValue?: string;
-  required?: boolean;
-  type?: string;
-  autoComplete?: string;
-  className?: string;
-}) {
-  const error = state.fieldErrors?.[name];
+  ...rest
+}: { state: CheckoutState; name: string; defaultValue?: string } & Omit<
+  React.ComponentProps<typeof SharedField>,
+  "name" | "error" | "defaultValue"
+>) {
   return (
-    <div className={className}>
-      <label htmlFor={name} className="label mb-2 block">
-        {label}
-        {!required && <span className="ml-1 normal-case tracking-normal text-ink-subtle">(optional)</span>}
-      </label>
-      <input
-        id={name}
-        name={name}
-        type={type}
-        required={required}
-        autoComplete={autoComplete}
-        defaultValue={state.values?.[name] ?? defaultValue ?? ""}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${name}-error` : undefined}
-        className={`field ${error ? "border-danger" : ""}`}
-      />
-      {error && (
-        <p id={`${name}-error`} className="mt-2 text-sm text-danger">
-          {error}
-        </p>
-      )}
-    </div>
+    <SharedField
+      name={name}
+      error={state.fieldErrors?.[name]}
+      defaultValue={state.values?.[name] ?? defaultValue}
+      {...rest}
+    />
   );
 }
 

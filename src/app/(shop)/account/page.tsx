@@ -4,6 +4,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { SignOutButton } from "@/components/account/sign-out-button";
+import { Badge } from "@/components/ui/badge";
+import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/order-status";
 import { getSessionUser } from "@/lib/cart";
 import { formatPrice } from "@/lib/catalog";
 import { getUserOrders } from "@/lib/orders";
@@ -88,7 +90,7 @@ async function AccountContents() {
                     </ul>
                     <div className="text-right">
                       <p className="price">{formatPrice(o.totalCents)}</p>
-                      <p className="eyebrow mt-1 capitalize">{o.status}</p>
+                      <div className="mt-2 flex justify-end"><Badge tone={ORDER_STATUS_TONE[o.status]}>{ORDER_STATUS_LABEL[o.status]}</Badge></div>
                     </div>
                   </div>
                 </li>

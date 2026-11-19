@@ -120,7 +120,7 @@ export async function getCart(): Promise<Cart> {
       size: cartItems.size,
       quantity: cartItems.quantity,
       unitPriceCents: products.priceCents,
-      stock: sql<number>`coalesce(${stock.quantity}, 0)`.mapWith(Number),
+      stock: sql<number>`case when ${products.archivedAt} is not null then 0 else coalesce(${stock.quantity}, 0) end`.mapWith(Number),
     })
     .from(cartItems)
     .innerJoin(products, eq(cartItems.productId, products.id))
